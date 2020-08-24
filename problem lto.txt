@@ -1,0 +1,126 @@
+
+Solution
+--------
+
+        When  we need  the function  bodies of  all the  functions,
+        we  need  to  consider  link  time  optimization  (LTO).  Thus
+        we  specify  the  options  "-flto".  Now  if  we  specify  the
+        option "-flto-partiton=none", it loads  the call graph and the
+        function  bodies  However options  "-flto-partition=1to1"  and
+        "-flto-partition=balanced" loads  only the call graph  and not
+        the function bodies  in the wpa phase. However,  it loads both
+        the call graph  and the function bodies for  each partition in
+        the ltrans phase.
+
+        We have 2 input files `test1.c' and `test2.c'. 
+
+        Below are the observations to be noted.
+
+        1.  If  we  execute   without  specifying  "-flto"  option  it
+            generates dump  files for test1.c and test2.c  but not for
+            the  combined  output   (i.e.  all  files  merged.*.*  are
+            missing).
+
+                gcc -fplugin=./plugin.so -c test1.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -c test2.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -o merged test1.o test2.o -fdump-ipa-all
+
+               In order  to dump  the combined  output, we  need to
+               enable the lto mode.
+        
+           As LTO does  not get invoked for  individual files, flag
+           `in_lto_p' has value 0.
+
+        2. If we execute using "-flto -flto-partition=none" option, it
+           generates complete  output as both  the call graph  and the
+           function  bodies get  loaded.  This gives  us the  complete
+           output.
+
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=none test1.c -fdump-ipa-all -O3
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=none test2.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -o merged -flto -flto-partition=none test1.o test2.o -fdump-ipa-all
+
+           As LTO does  not get invoked for  individual files, flag
+           `in_lto_p' has  value 0.  However, for the  combined output
+           flag `in_lto_p' has value 1.  The value of flags `flag_wpa'
+           and  `flag_ltrans' is  0 as  non-partitioned mode  does not
+           have WPA and LTRANS phase.
+ 
+        3. If we execute using "-flto -flto-partition=balanced" option
+           it does  not generate any  data in the combined  wpa output
+           file as  the function  bodies are not  available.  However,
+           ltrans file  dumps all the functions for each
+           partition as  both the call  graph and the  function bodies
+           are loaded for each partition.
+
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=balanced test1.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=balanced test2.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -o merged -flto -flto-partition=balanced test1.o test2.o -fdump-ipa-all
+
+           As LTO does  not get invoked for  individual files, flag
+           `in_lto_p' has  value 0.  However, for the  combined output
+           flag `in_lto_p'  has value  1. Observe  the list  of passes
+           executed in the  WPA phase when the flag  `flag_wpa' is set
+           to  1. Also  observe the  list  of passes  executed in  the
+           LTRANS phase  when the flag  `flag_ltrans' is set to  1. In
+           partitioned  mode  we  have  both  WPA  and  LTRANS  phase.
+           However, LTRANS is invoked for every partition.
+
+        4. If we execute  using "-flto -flto-partition=1to1" option
+           it does  not generate any  data in the combined  wpa output
+           file  as the  function bodies  are not  available. However,
+           ltrans file dumps  all the functions for  each partition as
+           both the call graph and  the function bodies are loaded for
+           each partition. `1to1' option  creates one translation unit
+           for each file.
+
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=1to1 test1.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=1to1 test2.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -o merged -flto -flto-partition=1to1 test1.o test2.o -fdump-ipa-all
+
+           As LTO does  not get invoked for  individual files, flag
+           `in_lto_p' has  value 0.  However, for the  combined output
+           flag `in_lto_p'  has value  1. Observe  the list  of passes
+           executed in the  WPA phase when the flag  `flag_wpa' is set
+           to  1. Also  observe the  list  of passes  executed in  the
+           LTRANS phase  when the flag  `flag_ltrans' is set to  1. In
+           partitioned  mode  we  have  both  WPA  and  LTRANS  phase.
+           However,  LTRANS  is  invoked  for  every  partition.  With
+           partition option  `1to1' the number of  partitions is equal
+           to the number of translation units (number of files).
+
+        5. If we execute using "-flto -flto-partition=balanced --param
+           lto-partitions=3  --param   lto-min-partition=5"  option, 3
+           partitions  are formed with  each partition  having minimum
+           size of 5 instructions.
+
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=balanced test1.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=balanced test2.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -o merged -flto -flto-partition=balanced test1.o test2.o -fdump-ipa-all --param lto-partitions=3 --param lto-min-partition=5
+
+           As LTO does  not get invoked for  individual files, flag
+           `in_lto_p' has  value 0.  However, for the  combined output
+           flag `in_lto_p'  has value  1. Observe  the list  of passes
+           executed in the  WPA phase when the flag  `flag_wpa' is set
+           to  1. Also  observe the  list  of passes  executed in  the
+           LTRANS phase  when the flag  `flag_ltrans' is set to  1. In
+           partitioned  mode  we  have  both  WPA  and  LTRANS  phase.
+           However, LTRANS is invoked for every partition.
+
+        6. If we execute using "-flto -flto-partition=balanced --param
+           lto-partitions=3  --param  lto-min-partition=300" option, 2
+           partitions  are formed with  each partition  having minimum
+           size of 300 instructions.
+
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=balanced test1.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -c -flto -flto-partition=balanced test2.c -fdump-ipa-all
+                gcc -fplugin=./plugin.so -o merged -flto -flto-partition=balanced test1.o test2.o -fdump-ipa-all --param lto-partitions=3 --param lto-min-partition=300
+
+           As LTO does  not get invoked for  individual files, flag
+           `in_lto_p' has  value 0.  However, for the  combined output
+           flag `in_lto_p'  has value  1. Observe  the list  of passes
+           executed in the  WPA phase when the flag  `flag_wpa' is set
+           to  1. Also  observe the  list  of passes  executed in  the
+           LTRANS phase  when the flag  `flag_ltrans' is set to  1. In
+           partitioned  mode  we  have  both  WPA  and  LTRANS  phase.
+           However, LTRANS is invoked for every partition.
